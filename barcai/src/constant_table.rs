@@ -1,3 +1,6 @@
+use std::convert::TryInto;
+use std::mem::size_of;
+
 use crate::constant::BarcaiConstant;
 
 pub struct BarcaiConstantTable {
@@ -13,42 +16,66 @@ impl BarcaiConstantTable {
         }
     }
 
-    pub fn load(data: Vec<u8>) -> Self {
-        let size = data.len();
-        let i = 0usize;
-        while i < size {
-            
-        }
-    }
-
-    pub fn get_data(&self) -> Vec<u8> {
+	pub fn get_data(self) -> Vec<u8> {
         self.data
     }
 
+    pub fn load_data(data: Vec<u8>) -> Self {
+		let mut table = Vec::new();
+		
+        let data_length = data.len();
+        let mut i = 0usize;
+        while i < data_length {
+			let constant_type = data[i];
+			i += 1;
+            match constant_type {
+				0 => {
+					let size = size_of::<i64>();
+					table.push(BarcaiConstant::I64(i64::from_ne_bytes(data[i..i + size].try_into().unwrap())));
+					i += size;
+				},
+				1 => {
+					let size = size_of::<f64>();
+					table.push(BarcaiConstant::F64(f64::from_ne_bytes(data[i..i + size].try_into().unwrap())));
+					i += size;
+				},
+				2 => {
+					let size = size_of::<usize>();
+					let length = usize::from_ne_bytes(data[i..i + size].try_into().unwrap());
+					i += size;
+					table.push(BarcaiConstant::String(String::from_utf8(data[i..i + length].to_vec()).unwrap()));
+					i += length;
+				},
+				n => {
+					panic!("tried to load unknown constant type: {}", n);
+				}
+			}
+        }
+		BarcaiConstantTable {
+			data: Vec::with_capacity(0),
+			table
+		}
+    }
+
+	pub fn get_constant(&self, index: usize) -> &BarcaiConstant {
+		&self.table[index]
+	}
+
     pub fn push_i64(&mut self, constant: i64) {
         self.data.push(0u8);
-        self.data.extend_from_slice(&constant.to_le_bytes());
+        self.data.extend_from_slice(&constant.to_ne_bytes());
     }
 
     pub fn push_f64(&mut self, constant: f64) {
         self.data.push(1u8);
-        self.data.extend_from_slice(&constant.to_le_bytes());
+        self.data.extend_from_slice(&constant.to_ne_bytes());
     }
 
     pub fn push_string(&mut self, constant: String) {
         self.data.push(2u8);
+		let bytes = constant.as_bytes();
+		let length = bytes.len();
+		self.data.extend_from_slice(&length.to_ne_bytes());
         self.data.extend_from_slice(&constant.as_bytes());
-    }
-
-    pub fn read_i64_consant(&self, start: usize) -> i64 {
-        i64::from_le_bytes(self.data[start..start + 8].try_into().unwrap())
-    }
-
-    pub fn read_f64_consant(&self, start: usize) -> f64 {
-        f64::from_le_bytes(self.data[start..start + 8].try_into().unwrap())
-    }
-
-    pub fn read_string_consant(&self, start: usize) -> String {
-        String::from_utf8(self.data[start..].to_vec()).unwrap()
     }
 }
